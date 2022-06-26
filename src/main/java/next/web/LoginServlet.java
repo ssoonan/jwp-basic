@@ -25,7 +25,7 @@ public class LoginServlet extends HttpServlet {
         User user = DataBase.findUserById(req.getParameter("userId"));
 
         if (user == null || !user.getPassword().equals(req.getParameter("password"))) {
-            resp.sendRedirect("/user/login_failed.html");
+            resp.sendRedirect("/user/login_failed.jsp");
             return;
         }
 
