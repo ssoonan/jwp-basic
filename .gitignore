@@ -5,3 +5,5 @@
 /jwp-basic.iml
 /.idea/
 /tomcat.8080/
+webapp/WEB-INF/lib
+db
