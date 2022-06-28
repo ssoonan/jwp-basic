@@ -11,20 +11,28 @@ import core.jdbc.ConnectionManager;
 import next.model.User;
 
 
-abstract class JDBCTemplate {
+interface RowMapper<T> {
+    T mapRow(ResultSet rs) throws SQLException;
+}
+
+interface PreparedStatementSetter {
+    void setValues(PreparedStatement pstmt) throws SQLException;
+}
+
+
+class JDBCTemplate<T> {
     Connection con;
     PreparedStatement pstmt;
+    ResultSet rs;
 
     JDBCTemplate() { // 인스턴스를 만들며 세팅
         con = ConnectionManager.getConnection();
     }
 
-    public abstract void setValues() throws SQLException;
-
-    public void executeUpdate(String sql) throws SQLException {
+    public void executeUpdate(String sql, PreparedStatementSetter pss) throws SQLException {
         try {
             pstmt = con.prepareStatement(sql);
-            setValues();
+            pss.setValues(pstmt);
             pstmt.executeUpdate();
         } finally {
             if (pstmt != null) {
@@ -36,23 +44,25 @@ abstract class JDBCTemplate {
             }
         }
     }
-}
 
 
-// 그냥 확장해서 만드려니 또 확장성이 꺠지네,, 흠.. 익명클래스도 일회성이랄까 -> 다시 추상클래스로 만들면 됐군
-abstract class SelectJDBCTemplate<T> extends JDBCTemplate {
-    ResultSet rs;
-    public abstract T mapRow(ResultSet rs) throws SQLException; // rs의 결과를 매핑해서 ArrayList로 반환하는 함수. 이 때 타입이정해지지 않으니 Object로 return
+    public T executeQueryOne(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
+        pstmt = con.prepareStatement(sql);
+        pss.setValues(pstmt);
+        rs = pstmt.executeQuery();
+        if (!rs.next()) return null;
+        return rm.mapRow(rs);
+    }
 
-    public List<T> executeQuery(String sql) throws SQLException {
+    public List<T> executeQuery(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
         try {
             pstmt = con.prepareStatement(sql);
-            setValues();
+            pss.setValues(pstmt);
             rs = pstmt.executeQuery();
             ArrayList<T> results = new ArrayList<>();
 
             while (rs.next()) {
-                T result = mapRow(rs);
+                T result = rm.mapRow(rs);
                 results.add(result);
             }
             return results;
@@ -70,66 +80,65 @@ abstract class SelectJDBCTemplate<T> extends JDBCTemplate {
 }
 
 
-
 public class UserDao {
 
     public void insert(User user) throws SQLException {
-        JDBCTemplate jdbcTemplate = new JDBCTemplate() {
+        PreparedStatementSetter pss = new PreparedStatementSetter() {
             @Override
-            public void setValues() throws SQLException {
+            public void setValues(PreparedStatement pstmt) throws SQLException {
                 pstmt.setString(1, user.getUserId());
                 pstmt.setString(2, user.getPassword());
                 pstmt.setString(3, user.getName());
                 pstmt.setString(4, user.getEmail());
             }
         };
-        jdbcTemplate.executeUpdate("INSERT INTO USERS VALUES (?, ?, ?, ?)");
+        JDBCTemplate jdbcTemplate = new JDBCTemplate();
+        jdbcTemplate.executeUpdate("INSERT INTO USERS VALUES (?, ?, ?, ?)", pss);
     }
 
 
     public void update(User user) throws SQLException {
-        JDBCTemplate jdbcTemplate = new JDBCTemplate() {
+        PreparedStatementSetter pss = new PreparedStatementSetter() {
             @Override
-            public void setValues() throws SQLException {
+            public void setValues(PreparedStatement pstmt) throws SQLException {
                 pstmt.setString(1, user.getName());
                 pstmt.setString(2, user.getPassword());
                 pstmt.setString(3, user.getEmail());
                 pstmt.setString(4, user.getUserId());
             }
         };
-        jdbcTemplate.executeUpdate("UPDATE USERS SET name=?, password=?, email=? WHERE userId=?");
+        JDBCTemplate jdbcTemplate = new JDBCTemplate();
+        jdbcTemplate.executeUpdate("UPDATE USERS SET name=?, password=?, email=? WHERE userId=?", pss);
     }
 
     public List<User> findAll() throws SQLException {
-        SelectJDBCTemplate<User> selectJDBCTemplate = new SelectJDBCTemplate<User>() {
+
+        RowMapper<User> rm = new RowMapper<User>() {
             @Override
             public User mapRow(ResultSet rs) throws SQLException {
                 return new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email"));
             }
-
-            @Override
-            public void setValues() throws SQLException {
-
-            }
         };
-        return selectJDBCTemplate.executeQuery("SELECT * FROM USERS");
+
+        JDBCTemplate<User> jdbcTemplate = new JDBCTemplate<>();
+        return jdbcTemplate.executeQuery("SELECT * FROM USERS", pstmt -> {}, rm);
     }
 
     public User findByUserId(String userId) throws SQLException {
-        SelectJDBCTemplate<User> selectJDBCTemplate = new SelectJDBCTemplate<User>() {
+        PreparedStatementSetter pss = new PreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement pstmt) throws SQLException {
+                pstmt.setString(1, userId);
+            }
+        };
+        RowMapper<User> rm = new RowMapper<User>() {
             @Override
             public User mapRow(ResultSet rs) throws SQLException {
                 return new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"),
                         rs.getString("email"));
             }
-
-            @Override
-            public void setValues() throws SQLException {
-                pstmt.setString(1, userId);
-            }
         };
-        List<User> users = selectJDBCTemplate.executeQuery("SELECT userId, password, name, email FROM USERS WHERE userid=?");
-        if (users.isEmpty()) return null;
-        return users.get(0);
+        JDBCTemplate<User> jdbcTemplate = new JDBCTemplate<>();;
+        return jdbcTemplate.executeQueryOne("SELECT userId, password, name, email FROM USERS WHERE userid=?", pss, rm);
     }
 }
