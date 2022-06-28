@@ -11,6 +11,16 @@ import core.jdbc.ConnectionManager;
 import next.model.User;
 
 public class UserDao {
+
+    private void setValuesForInsert(User user, PreparedStatement pstmt) throws SQLException {
+            pstmt.setString(1, user.getUserId());
+            pstmt.setString(2, user.getPassword());
+            pstmt.setString(3, user.getName());
+            pstmt.setString(4, user.getEmail());
+
+            pstmt.executeUpdate();
+    }
+
     public void insert(User user) throws SQLException {
         Connection con = null;
         PreparedStatement pstmt = null;
@@ -18,12 +28,7 @@ public class UserDao {
             con = ConnectionManager.getConnection();
             String sql = "INSERT INTO USERS VALUES (?, ?, ?, ?)";
             pstmt = con.prepareStatement(sql);
-            pstmt.setString(1, user.getUserId());
-            pstmt.setString(2, user.getPassword());
-            pstmt.setString(3, user.getName());
-            pstmt.setString(4, user.getEmail());
-
-            pstmt.executeUpdate();
+            setValuesForInsert(user, pstmt);
         } finally {
             if (pstmt != null) {
                 pstmt.close();
@@ -35,20 +40,23 @@ public class UserDao {
         }
     }
 
+    private void setValuesForUpdate(User user, PreparedStatement pstmt) throws SQLException {
+        pstmt.setString(1, user.getName());
+        pstmt.setString(2, user.getPassword());
+        pstmt.setString(3, user.getEmail());
+        pstmt.setString(4, user.getUserId());
+
+        pstmt.executeUpdate();
+    }
+
     public void update(User user) throws SQLException {
         Connection con = null;
         PreparedStatement pstmt = null;
-        ResultSet rs = null;
         try {
             con = ConnectionManager.getConnection();
             String sql = "UPDATE USERS SET name=?, password=?, email=? WHERE userId=?";
             pstmt = con.prepareStatement(sql);
-            pstmt.setString(1, user.getName());
-            pstmt.setString(2, user.getPassword());
-            pstmt.setString(3, user.getEmail());
-            pstmt.setString(4, user.getUserId());
-
-            pstmt.executeUpdate();
+            setValuesForUpdate(user, pstmt);
         } finally {
             if (pstmt != null) {
                 pstmt.close();
