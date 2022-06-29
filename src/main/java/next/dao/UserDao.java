@@ -11,6 +11,7 @@ import core.jdbc.ConnectionManager;
 import next.model.User;
 
 
+@FunctionalInterface
 interface RowMapper<T> {
     T mapRow(ResultSet rs) throws SQLException;
 }
@@ -21,7 +22,7 @@ interface PreparedStatementSetter {
 }
 
 
-class JDBCTemplate<T> {
+class JDBCTemplate {
     Connection con;
     PreparedStatement pstmt;
     ResultSet rs;
@@ -47,7 +48,7 @@ class JDBCTemplate<T> {
     }
 
 
-    public T executeQueryOne(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
+    public <T> T executeQueryOne(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
         pstmt = con.prepareStatement(sql);
         pss.setValues(pstmt);
         rs = pstmt.executeQuery();
@@ -55,7 +56,7 @@ class JDBCTemplate<T> {
         return rm.mapRow(rs);
     }
 
-    public List<T> executeQuery(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
+    public <T> List<T> executeQuery(String sql, PreparedStatementSetter pss, RowMapper<T> rm) throws SQLException {
         try {
             pstmt = con.prepareStatement(sql);
             pss.setValues(pstmt);
@@ -110,15 +111,14 @@ public class UserDao {
 
         RowMapper<User> rm = rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email"));
 
-        JDBCTemplate<User> jdbcTemplate = new JDBCTemplate<>();
-        return jdbcTemplate.executeQuery("SELECT * FROM USERS", pstmt -> {}, rm);
+        JDBCTemplate jdbcTemplate = new JDBCTemplate();
+        return jdbcTemplate.executeQuery("SELECT * FROM USERS", pstmt -> {}, rm); // 이게 되는 이유? 어차피 setValues가 아무것도 안하니까 그냥 빈 깡통인 메서드를 전달하는 것. 구현은 됐으니 상관 X
     }
 
     public User findByUserId(String userId) throws SQLException {
         PreparedStatementSetter pss =  pstmt -> pstmt.setString(1, userId);
-        RowMapper<User> rm = rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"),
-                rs.getString("email"));
-        JDBCTemplate<User> jdbcTemplate = new JDBCTemplate<>();;
+        RowMapper<User> rm = rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email"));
+        JDBCTemplate jdbcTemplate = new JDBCTemplate();;
         return jdbcTemplate.executeQueryOne("SELECT userId, password, name, email FROM USERS WHERE userid=?", pss, rm);
     }
 }
