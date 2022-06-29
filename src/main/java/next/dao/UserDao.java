@@ -25,60 +25,47 @@ interface PreparedStatementSetter {
 
 
 class JDBCTemplate {
-    Connection con;
-    PreparedStatement pstmt;
     ResultSet rs;
 
-    JDBCTemplate() { // 인스턴스를 만들며 세팅
-        con = ConnectionManager.getConnection();
-    }
-
-    public void executeUpdate(String sql, PreparedStatementSetter pss) throws SQLException {
-        try {
-            pstmt = con.prepareStatement(sql);
+    public void executeUpdate(String sql, PreparedStatementSetter pss) {
+        try (Connection con = ConnectionManager.getConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
             pss.setValues(pstmt);
             pstmt.executeUpdate();
-        } finally {
-            if (pstmt != null) {
-                pstmt.close();
-            }
-
-            if (con != null) {
-                con.close();
-            }
+        } catch (SQLException e) {
+            throw new DataAccessException(e);
         }
     }
 
-    public void executeUpdate(String sql, Object... args) throws SQLException {
-        try {
-            pstmt = con.prepareStatement(sql);
+    public void executeUpdate(String sql, Object... args){
+        try (Connection con = ConnectionManager.getConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
             for (int i=0; i < args.length; i++) {
                 pstmt.setObject(i+1, args[i]);
             }
             pstmt.executeUpdate();
-        } finally {
-            if (pstmt != null) {
-                pstmt.close();
-            }
-
-            if (con != null) {
-                con.close();
-            }
+        } catch (SQLException e) {
+            throw new DataAccessException(e);
         }
     }
 
 
-    public <T> T executeQueryOne(String sql, RowMapper<T> rm, PreparedStatementSetter pss) throws SQLException {
-        pstmt = con.prepareStatement(sql);
-        pss.setValues(pstmt);
-        rs = pstmt.executeQuery();
-        if (!rs.next()) return null;
-        return rm.mapRow(rs);
+    public <T> T executeQueryOne(String sql, RowMapper<T> rm, PreparedStatementSetter pss) {
+        try (Connection con = ConnectionManager.getConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
+            pss.setValues(pstmt);
+            rs = pstmt.executeQuery();
+            if (!rs.next()) return null;
+            return rm.mapRow(rs);
+        } catch (SQLException e) {
+            throw new DataAccessException(e);
+        }
+
     }
 
-    public <T> List<T> executeQuery(String sql, RowMapper<T> rm, PreparedStatementSetter pss) throws SQLException {
-        try {
-            pstmt = con.prepareStatement(sql);
+    public <T> List<T> executeQuery(String sql, RowMapper<T> rm, PreparedStatementSetter pss) {
+        try (Connection con = ConnectionManager.getConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
             pss.setValues(pstmt);
             rs = pstmt.executeQuery();
             ArrayList<T> results = new ArrayList<>();
@@ -88,15 +75,8 @@ class JDBCTemplate {
                 results.add(result);
             }
             return results;
-
-        } finally {
-            if (pstmt != null) {
-                pstmt.close();
-            }
-
-            if (con != null) {
-                con.close();
-            }
+        } catch (SQLException e) {
+            throw new DataAccessException(e);
         }
     }
 }
@@ -104,26 +84,27 @@ class JDBCTemplate {
 
 public class UserDao {
 
-    public void insert(User user) throws SQLException {
+    public void insert(User user) {
         JDBCTemplate jdbcTemplate = new JDBCTemplate();
         jdbcTemplate.executeUpdate("INSERT INTO USERS VALUES (?, ?, ?, ?)", user.getUserId(), user.getPassword(), user.getName(), user.getEmail());
     }
 
-    public void update(User user) throws SQLException {
+    public void update(User user) {
         JDBCTemplate jdbcTemplate = new JDBCTemplate();
         jdbcTemplate.executeUpdate("UPDATE USERS SET name=?, password=?, email=? WHERE userId=?", user.getName(), user.getPassword(), user.getEmail(), user.getUserId());
     }
 
-    public List<User> findAll() throws SQLException {
-        RowMapper<User> rm = rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email"));
+    public List<User> findAll() {
         JDBCTemplate jdbcTemplate = new JDBCTemplate();
-        return jdbcTemplate.executeQuery("SELECT * FROM USERS", rm, pstmt -> {}); // 이게 되는 이유? 어차피 setValues가 아무것도 안하니까 그냥 빈 깡통인 메서드를 전달하는 것. 구현은 됐으니 상관 X
+        return jdbcTemplate.executeQuery("SELECT * FROM USERS",
+                rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email")),
+                pstmt -> {}); // 이게 되는 이유? 어차피 setValues가 아무것도 안하니까 그냥 빈 깡통인 메서드를 전달하는 것. 구현은 됐으니 상관 X
     }
 
-    public User findByUserId(String userId) throws SQLException {
-        PreparedStatementSetter pss =  pstmt -> pstmt.setString(1, userId);
-        RowMapper<User> rm = rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email"));
+    public User findByUserId(String userId) {
         JDBCTemplate jdbcTemplate = new JDBCTemplate();;
-        return jdbcTemplate.executeQueryOne("SELECT userId, password, name, email FROM USERS WHERE userid=?", rm, pss);
+        return jdbcTemplate.executeQueryOne("SELECT userId, password, name, email FROM USERS WHERE userid=?",
+                rs -> new User(rs.getString("userId"), rs.getString("password"), rs.getString("name"), rs.getString("email")),
+                pstmt -> pstmt.setString(1, userId));
     }
 }
